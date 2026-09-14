@@ -1,0 +1,14 @@
+[package]
+name = "liproto"
+version.workspace = true
+license.workspace = true
+
+[lib]
+name = "liproto"
+module = "liproto"
+archive = "liproto"
+
+[dependencies]
+rstd-core = { workspace = true, pub = true }
+rstd-alloc = { workspace = true, pub = true }
+rstd-parse = { workspace = true, pub = true }

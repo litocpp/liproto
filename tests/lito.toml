@@ -1,0 +1,16 @@
+[package]
+name = "liproto-tests"
+version.workspace = true
+license.workspace = true
+
+[[test]]
+name = "liproto-tests"
+sources = ["src/main.cpp", "src/wire.cpp", "src/codegen.cpp", "src/integration.cpp"]
+link-stdlib = false
+
+[dependencies]
+liproto = { workspace = true }
+liproto-codegen = { workspace = true }
+rstd-std = { workspace = true }
+rstd-test = { workspace = true }
+rstd-nostd = { workspace = true }

@@ -1,0 +1,25 @@
+[package]
+name = "liproto-codegen"
+version.workspace = true
+license.workspace = true
+
+[lib]
+name = "liproto-codegen"
+module = "liproto.codegen"
+archive = "liproto.codegen"
+
+[[bin]]
+name = "protoc-gen-liproto"
+sources = ["src/main.cpp"]
+link-stdlib = false
+
+[[bin]]
+name = "liproto-gen"
+sources = ["src/generate.cpp"]
+link-stdlib = false
+
+[dependencies]
+liproto = { workspace = true, pub = true }
+rstd-std = { workspace = true }
+rstd-nostd = { workspace = true }
+rstd-argparse = { workspace = true }
