@@ -16,7 +16,7 @@ link-stdlib = false
 [[bin]]
 name = "liproto-gen"
 sources = ["src/generate.cpp"]
-link-stdlib = false
+host-tool = true
 
 [dependencies]
 liproto = { workspace = true, pub = true }
