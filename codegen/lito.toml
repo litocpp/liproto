@@ -11,12 +11,12 @@ archive = "liproto.codegen"
 [[bin]]
 name = "protoc-gen-liproto"
 sources = ["src/main.cpp"]
-link-stdlib = false
+host-tool = true
 
 [[bin]]
 name = "liproto-gen"
 sources = ["src/generate.cpp"]
-host-tool = true
+link-stdlib = false
 
 [dependencies]
 liproto = { workspace = true, pub = true }
