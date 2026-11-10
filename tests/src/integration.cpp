@@ -22,10 +22,9 @@ TEST(Integration, ProtocGeneratedModuleCompilesAndRuns) {
     ASSERT_TRUE(rstd::fs::soft_link(rstd::ref<rstd::path::Path>(rstd_source->as_os_str()),
                                     root.join("rstd"_str).as_path())
                     .is_ok());
-    auto generator = rstd::path::PathBuf::from(source->as_os_str().to_os_string())
-                         .join("build/release/bin/liproto-codegen/liproto-gen"_str);
-    ASSERT_TRUE(
-        rstd::fs::soft_link(generator.as_path(), root.join("generator"_str).as_path()).is_ok());
+    ASSERT_TRUE(rstd::fs::soft_link(rstd::ref<rstd::path::Path>(plugin->as_os_str()),
+                                    root.join("plugin"_str).as_path())
+                    .is_ok());
     ASSERT_TRUE(rstd::fs::create_dir_all(root.join(".lito"_str).as_path()).is_ok());
     ASSERT_TRUE(write(".lito/config.toml"_str, R"([patch.litocpp]
 rstd-basic = { path = "rstd" }
@@ -133,8 +132,8 @@ rstd-nostd = { path = "rstd/src/nostd" }
 rstd-std = { path = "rstd/src/std" }
 [build-tools.protoc]
 path = "protoc"
-[build-tools.generator]
-path = "./generator"
+[build-tools.plugin]
+path = "./plugin"
 [profile]
 exceptions = false
 rtti = false
@@ -145,19 +144,13 @@ rtti = false
             .is_ok());
     ASSERT_TRUE(write("build.lua"_str,
                       R"(local target = lito.target({kind = "lib", name = "generated-check"})
-local descriptor = lito.run({
-  tool = lito.tool("protoc"), cwd = ".",
-  args = {"-I.", "--include_imports", "--descriptor_set_out=@OUTPUT:1@", "--dependency_out=@OUTPUT:2@", "demo.proto"},
-  inputs = {"demo.proto"}, outputs = {"schema.pb", "schema.d"}, depfile = {output = 2},
+local generated = lito.run({
+  tool = lito.tool("protoc"), tools = {lito.tool("plugin")}, cwd = ".", output_cwd = 1,
+  args = {"-I.", "--plugin=protoc-gen-liproto=@TOOL:1@", "--liproto_out=.", "demo.proto", "other.proto"},
+  inputs = {"demo.proto", "other.proto"}, outputs = {"src/demo.cppm", "src/other.cppm"},
 })
-for _, name in ipairs({"demo", "other"}) do
-  local source = lito.run({
-    tool = lito.tool("generator"), cwd = ".",
-    args = {"--descriptor-set", "@INPUT:1@", "--root", name .. ".proto", "--output", "@OUTPUT@"},
-    inputs = {descriptor.outputs[1]}, outputs = {"src/" .. name .. ".cppm"},
-  })
-  lito.target_add_generated_source(target, source.outputs[1])
-end
+lito.target_add_generated_source(target, generated.outputs[1])
+lito.target_add_generated_source(target, generated.outputs[2])
 )"_str)
                     .is_ok());
     ASSERT_TRUE(write("main.cpp"_str, R"(#include "oracle.hpp"
