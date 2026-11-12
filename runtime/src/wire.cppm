@@ -239,3 +239,21 @@ public:
     }
 };
 } // namespace liproto
+
+export namespace rstd
+{
+template<>
+struct Impl<fmt::Display, liproto::Error> : ImplBase<liproto::Error> {
+    auto fmt(fmt::Formatter& formatter) const -> bool {
+        const auto& error = this->self();
+        return formatter.write_fmt(fmt::Arguments::make("protobuf error {} at byte {} in field {}",
+                                                        static_cast<int>(error.kind),
+                                                        error.offset,
+                                                        error.field));
+    }
+};
+template<>
+struct Impl<fmt::Debug, liproto::Error> : Impl<fmt::Display, liproto::Error> {};
+template<>
+struct Impl<error::Error, liproto::Error> : DefaultInImpl<error::Error, liproto::Error> {};
+} // namespace rstd
