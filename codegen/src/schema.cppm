@@ -22,6 +22,7 @@ export struct ResolvedField {
     bool     optional;
     String   message_type;
     String   oneof;
+    String   variant;
     unsigned map_key {};
     unsigned map_value {};
     bool     packed {};
@@ -209,9 +210,12 @@ export auto build_schema(const Request& request) -> Result<Schema, String> {
                     if (! identifier(name)) return Err(String::make("invalid oneof name"_str));
                     field.oneof = String::make("o_"_str);
                     field.oneof.push_str(cpp_identifier(name).as_str());
+                    field.variant = variant_identifier(source_field.name.as_str());
                 }
                 for (auto& existing : message.fields)
-                    if (existing.name == field.name || existing.number == field.number)
+                    if (existing.name == field.name || existing.number == field.number ||
+                        (! field.oneof.as_str().is_empty() && existing.oneof == field.oneof &&
+                         existing.variant == field.variant))
                         return Err(String::make("duplicate field name or number"_str));
                 message.fields.push(rstd::move(field));
             }

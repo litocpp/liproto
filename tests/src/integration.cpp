@@ -62,6 +62,10 @@ message Sample {
 }
 message Peer { Sample parent = 1; }
 message Empty {}
+message OneofNames {
+  oneof choice { string class = 1; string class_name = 2; uint32 tag = 3; }
+  oneof other { bool active = 4; }
+}
 )"_str)
                     .is_ok());
     ASSERT_TRUE(
@@ -145,19 +149,31 @@ rtti = false
     ASSERT_TRUE(write("build.lua"_str,
                       R"(local target = lito.target({kind = "lib", name = "generated-check"})
 local generated = lito.run({
-  tool = lito.tool("protoc"), tools = {lito.tool("plugin")}, cwd = ".", output_cwd = 1,
-  args = {"-I.", "--plugin=protoc-gen-liproto=@TOOL:1@", "--liproto_out=.", "demo.proto", "other.proto"},
-  inputs = {"demo.proto", "other.proto"}, outputs = {"src/demo.cppm", "src/other.cppm"},
+  tool = lito.tool("protoc"), tools = {lito.tool("plugin")}, cwd = ".",
+  args = {"-I.", "--plugin=protoc-gen-liproto=@TOOL:1@", "--liproto_out=@OUTPUT_DIR@", "demo.proto", "other.proto"},
+  inputs = {"demo.proto", "other.proto"}, outputs = {"demo.cppm", "other.cppm"},
 })
 lito.target_add_generated_source(target, generated.outputs[1])
 lito.target_add_generated_source(target, generated.outputs[2])
 )"_str)
                     .is_ok());
     ASSERT_TRUE(write("main.cpp"_str, R"(#include "oracle.hpp"
+#include <rstd/enum.hpp>
 import proto.p_demo;
 import rstd;
 using namespace rstd::prelude;
 using rstd::literals::operator""_bytes;
+using rstd::literals::operator""_str;
+using ::alloc::string::String;
+using Selection = p_demo::M_Sample::C_o_selection;
+template<class T>
+concept NumericOneof = requires(T& value) { value.template as<9u>(); };
+static_assert(!NumericOneof<Selection>);
+static_assert(rstd::mtp::same_as<decltype(rstd::declval<Selection&>().as_first()), u32&>);
+static_assert(rstd::mtp::same_as<decltype(rstd::declval<const Selection&>().as_first()), const u32&>);
+static_assert(rstd::mtp::same_as<decltype(rstd::declval<Selection&&>().as_first()), u32&&>);
+static_assert(rstd::mtp::same_as<decltype(rstd::declval<const Selection&&>().as_first()), const u32&&>);
+static_assert(!rstd::mtp::copy<Selection> && rstd::mtp::move<Selection>);
 int main() {
     auto empty = liproto::decode<p_demo::M_Empty>(""_bytes);
     if (empty.is_err() || liproto::encoded_len(*empty).unwrap() != usize()) return 18;
@@ -172,9 +188,62 @@ int main() {
     if (merged.is_err() || decoded->f_child.is_none()) return 6;
     if ((*decoded->f_child)->f_count != u32(7) || (*decoded->f_child)->f_label.is_none()) return 7;
     if (liproto::merge(*decoded, "\x48\x01\x50\x02"_bytes).is_err()) return 8;
-    if (decoded->o_selection.is_none() || !decoded->o_selection->is<10u>()) return 9;
+    if (decoded->o_selection.is_none() || !decoded->o_selection->is_second()) return 9;
+    int branch = 0;
+    RSTD_MATCH(*decoded->o_selection) {
+        RSTD_CASE_PAYLOAD(first, value) { branch = static_cast<int>(value.to_primitive()); }
+        RSTD_CASE_PAYLOAD(second, value) { branch = static_cast<int>(value.to_primitive()) + 10; }
+        RSTD_CASE(selected) { return 21; }
+    }
+    if (branch != 12) return 22;
     if (liproto::merge(*decoded, "\x5a\x02\x08\x07\x5a\x02\x12\x00"_bytes).is_err()) return 10;
-    if (!decoded->o_selection->is<11u>() || decoded->o_selection->as<11u>()->f_label.is_none()) return 11;
+    if (!decoded->o_selection->is_selected() || decoded->o_selection->as_selected()->f_label.is_none()) return 11;
+    if (decoded->o_selection->as_selected()->f_count != u32(7)) return 23;
+    const auto& selection = *decoded->o_selection;
+    RSTD_MATCH(selection) {
+        RSTD_CASE_PAYLOAD(selected, value) {
+            static_assert(rstd::mtp::same_as<decltype(value), const Box<p_demo::M_Sample>&>);
+            if (value->f_count != u32(7)) return 24;
+        }
+        break;
+        default: return 25;
+    }
+    auto owned = Selection::make_selected(Box<p_demo::M_Sample>::make());
+    auto* original = &*owned.as_selected();
+    RSTD_MATCH(rstd::move(owned)) {
+        RSTD_CASE_PAYLOAD(selected, value) {
+            static_assert(rstd::mtp::same_as<decltype(value), Box<p_demo::M_Sample>&&>);
+            auto moved = rstd::move(value);
+            if (&*moved != original) return 26;
+        }
+        break;
+        default: return 27;
+    }
+    auto scalar = Selection::make_first(u32());
+    scalar.replace_second(u32(8));
+    if (scalar.tag() != Selection::Tag::second || scalar.as_second() != u32(8)) return 28;
+    auto visited = scalar.visit([](auto, const auto& value) -> bool {
+        if constexpr (rstd::mtp::same_as<rstd::mtp::rm_cvf<decltype(value)>, u32>) return value == u32(8);
+        else return false;
+    });
+    if (!visited) return 29;
+    p_demo::M_Sample zero;
+    zero.o_selection = Some(Selection::make_selected(Box<p_demo::M_Sample>::make()));
+    if (liproto::merge(zero, "\x48\x00\xc0\x3e\x01"_bytes).is_err()) return 34;
+    if (!zero.o_selection->is_first() || zero.o_selection->as_first() != u32()) return 35;
+    if (liproto::encode_to_vec(zero).unwrap().as_slice() != "\x48\x00"_bytes) return 36;
+    if (liproto::merge(zero, "\x4a\x00"_bytes).is_ok() || !zero.o_selection->is_first()) return 37;
+    p_demo::M_OneofNames names;
+    names.o_choice = Some(p_demo::M_OneofNames::C_o_choice::make_class_(String::make("keyword"_str)));
+    names.o_other = Some(p_demo::M_OneofNames::C_o_other::make_active(false));
+    names.o_choice->replace_class_name(String::make("suffix"_str));
+    auto named = liproto::decode<p_demo::M_OneofNames>(liproto::encode_to_vec(names).unwrap().as_slice()).unwrap();
+    if (named.o_other.is_none() || !named.o_other->is_active() || named.o_other->as_active()) return 30;
+    RSTD_MATCH(*named.o_choice) {
+        RSTD_CASE_PAYLOAD(class_, value) { return 31; }
+        RSTD_CASE_PAYLOAD(class_name, value) { if (value != "suffix"_str) return 32; }
+        RSTD_CASE_PAYLOAD(tag, value) { return 33; }
+    }
     if (liproto::merge(*decoded, "\x62\x02\x08\x01\x6a\x02\x08\x02\x70\x63"_bytes).is_err()) return 12;
     if (decoded->f_nested.is_none() || decoded->f_external.is_none() || decoded->f_status != i32(99)) return 13;
     if (p_demo::known_E_Status(decoded->f_status).is_some()) return 14;
@@ -207,6 +276,15 @@ int main() {
     auto executable = root.join("build/release/bin/generated-check/generated-check"_str);
     auto result     = rstd::process::Command::make(executable.as_path().as_os_str()).output();
     ASSERT_TRUE(result.is_ok());
+    if (! result->status.success()) {
+        auto error = rstd::io::stderr();
+        (void)rstd::io::write_all(error, result->stderr_buf.as_slice());
+        auto status = rstd::format("generated check exit: {}, signal: {}\n",
+                                   result->status.code().unwrap_or(i32(-1)),
+                                   result->status.signal().unwrap_or(i32()));
+        (void)rstd::io::write_all(error, status.as_str().as_bytes());
+    }
+    EXPECT_EQ(result->status.code().unwrap_or(i32(-1)), i32());
     ASSERT_TRUE(result->status.success());
     auto inspected = oracle("--decode=demo.Sample"_str, result->stdout_buf.as_slice());
     ASSERT_TRUE(inspected.status.success());

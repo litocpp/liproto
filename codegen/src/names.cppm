@@ -50,6 +50,50 @@ auto cpp_identifier(ref<str> value) -> String {
     return output;
 }
 
+auto variant_identifier(ref<str> value) -> String {
+    auto               name       = cpp_identifier(value);
+    constexpr ref<str> keywords[] = {
+        "alignas"_str,       "alignof"_str,     "and"_str,
+        "and_eq"_str,        "asm"_str,         "auto"_str,
+        "bitand"_str,        "bitor"_str,       "bool"_str,
+        "break"_str,         "case"_str,        "catch"_str,
+        "char"_str,          "char8_t"_str,     "char16_t"_str,
+        "char32_t"_str,      "class"_str,       "compl"_str,
+        "concept"_str,       "const"_str,       "consteval"_str,
+        "constexpr"_str,     "constinit"_str,   "const_cast"_str,
+        "continue"_str,      "co_await"_str,    "co_return"_str,
+        "co_yield"_str,      "decltype"_str,    "default"_str,
+        "delete"_str,        "do"_str,          "double"_str,
+        "dynamic_cast"_str,  "else"_str,        "enum"_str,
+        "explicit"_str,      "export"_str,      "extern"_str,
+        "false"_str,         "float"_str,       "for"_str,
+        "friend"_str,        "goto"_str,        "if"_str,
+        "inline"_str,        "int"_str,         "long"_str,
+        "mutable"_str,       "namespace"_str,   "new"_str,
+        "noexcept"_str,      "not"_str,         "not_eq"_str,
+        "nullptr"_str,       "operator"_str,    "or"_str,
+        "or_eq"_str,         "private"_str,     "protected"_str,
+        "public"_str,        "register"_str,    "reinterpret_cast"_str,
+        "requires"_str,      "return"_str,      "short"_str,
+        "signed"_str,        "sizeof"_str,      "static"_str,
+        "static_assert"_str, "static_cast"_str, "struct"_str,
+        "switch"_str,        "template"_str,    "this"_str,
+        "thread_local"_str,  "throw"_str,       "true"_str,
+        "try"_str,           "typedef"_str,     "typeid"_str,
+        "typename"_str,      "union"_str,       "unsigned"_str,
+        "using"_str,         "virtual"_str,     "void"_str,
+        "volatile"_str,      "wchar_t"_str,     "while"_str,
+        "xor"_str,           "xor_eq"_str
+    };
+    for (auto keyword : keywords) {
+        if (name != keyword) continue;
+        // cpp_identifier escapes trailing underscores, so this suffix cannot collide.
+        name.push_ascii('_');
+        break;
+    }
+    return name;
+}
+
 auto portable_name(ref<str> value) -> String {
     String output;
     for (auto byte : value.as_bytes()) {

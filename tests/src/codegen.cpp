@@ -161,6 +161,8 @@ TEST(Codegen, ReadableNamesAndKeywordPrefixes) {
     EXPECT_EQ(fields[usize(2)].name, "f_class"_str);
     EXPECT_EQ(fields[usize(3)].oneof, "o_payload_data"_str);
     EXPECT_EQ(fields[usize(4)].oneof, "o_switch"_str);
+    EXPECT_EQ(fields[usize(3)].variant, "payload"_str);
+    EXPECT_EQ(fields[usize(4)].variant, "return_"_str);
     auto files = generate(*schema);
     ASSERT_EQ(files.len(), usize(1));
     auto content = files[usize()].content.as_str();
@@ -174,6 +176,46 @@ TEST(Codegen, ReadableNamesAndKeywordPrefixes) {
     EXPECT_TRUE(content.contains("f_class {};"_str));
     EXPECT_TRUE(content.contains("Option<C_o_payload_data> o_payload_data {};"_str));
     EXPECT_TRUE(content.contains("Option<C_o_switch> o_switch {};"_str));
+    EXPECT_TRUE(content.contains("class C_o_payload_data {"_str));
+    EXPECT_TRUE(content.contains("payload = 4u,"_str));
+    EXPECT_TRUE(content.contains("return_ = 5u,"_str));
+    EXPECT_TRUE(content.contains("auto make_return_("_str));
+    EXPECT_TRUE(content.contains("auto as_return_() const&&"_str));
+    EXPECT_FALSE(content.contains("->template as<"_str));
+}
+
+TEST(Codegen, OneofKeywordNamesRemainDistinct) {
+    Request request;
+    request.roots.push(String::make("oneof.proto"_str));
+    FileDescriptor file;
+    file.name   = String::make("oneof.proto"_str);
+    file.syntax = String::make("proto3"_str);
+    MessageDescriptor message;
+    message.name = String::make("Names"_str);
+    message.oneofs.push(String::make("payload"_str));
+    ref<str> names[] = { "class"_str,    "class_"_str,   "classz5f"_str,  "tag"_str,
+                         "requires"_str, "_private"_str, "two__words"_str };
+    for (auto name : names) {
+        Field field;
+        field.name   = String::make(name);
+        field.number = static_cast<unsigned>(message.fields.len().to_primitive()) + 1;
+        field.type   = 13;
+        field.label  = 1;
+        field.oneof  = Some(0u);
+        message.fields.push(rstd::move(field));
+    }
+    file.messages.push(rstd::move(message));
+    request.files.push(rstd::move(file));
+    auto schema = build_schema(request);
+    ASSERT_TRUE(schema.is_ok());
+    const auto& fields = schema->files()[usize()].messages[usize()].fields;
+    EXPECT_EQ(fields[usize()].variant, "class_"_str);
+    EXPECT_EQ(fields[usize(1)].variant, "classz5f"_str);
+    EXPECT_EQ(fields[usize(2)].variant, "classz7a5f"_str);
+    EXPECT_EQ(fields[usize(3)].variant, "tag"_str);
+    EXPECT_EQ(fields[usize(4)].variant, "requires_"_str);
+    EXPECT_EQ(fields[usize(5)].variant, "z5fprivate"_str);
+    EXPECT_EQ(fields[usize(6)].variant, "twoz5fz5fwords"_str);
 }
 
 TEST(Codegen, LiteralZEscapesOnlyEscapeSequences) {

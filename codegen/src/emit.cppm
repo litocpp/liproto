@@ -41,6 +41,115 @@ auto map_arguments(const ResolvedField& field) -> String {
     }
     return arguments;
 }
+template<class... Parts>
+void emit(String& text, Parts... parts) {
+    (text.push_str(parts), ...);
+}
+void emit_oneof(String& text, const ResolvedMessage& message, const ResolvedField& first) {
+    auto name = String::make("C_"_str);
+    name.push_str(first.oneof.as_str());
+    emit(text,
+         "    class "_str,
+         name.as_str(),
+         " {\n    public:\n        enum class Tag : unsigned {\n"_str);
+    for (auto& field : message.fields) {
+        if (field.oneof != first.oneof) continue;
+        emit(text,
+             "            "_str,
+             field.variant.as_str(),
+             " = "_str,
+             decimal(field.number).as_str(),
+             "u,\n"_str);
+    }
+    emit(text, "        };\n    private:\n        using Storage = rstd::Choice<"_str);
+    bool separator = false;
+    for (auto& field : message.fields) {
+        if (field.oneof != first.oneof) continue;
+        if (separator) text.push_str(", "_str);
+        separator = true;
+        emit(text,
+             "rstd::choice_case<Tag::"_str,
+             field.variant.as_str(),
+             ", "_str,
+             field_type(field).as_str(),
+             ">"_str);
+    }
+    emit(text,
+         ">;\n        Storage storage_;\n        explicit "_str,
+         name.as_str(),
+         "(Storage storage) : storage_(rstd::move(storage)) {}\n    public:\n"
+         "        constexpr auto tag() const noexcept -> Tag { return storage_.which(); }\n"_str);
+    for (auto& field : message.fields) {
+        if (field.oneof != first.oneof) continue;
+        auto variant = field.variant.as_str();
+        auto type    = field_type(field);
+        emit(text,
+             "        static auto make_"_str,
+             variant,
+             "("_str,
+             type.as_str(),
+             " value) -> "_str,
+             name.as_str(),
+             " { return "_str,
+             name.as_str(),
+             "(Storage::with<Tag::"_str,
+             variant,
+             ">(rstd::move(value))); }\n"
+             "        constexpr auto is_"_str,
+             variant,
+             "() const noexcept -> bool { return storage_.is<Tag::"_str,
+             variant,
+             ">(); }\n"
+             "        void replace_"_str,
+             variant,
+             "("_str,
+             type.as_str(),
+             " value) { storage_.set<Tag::"_str,
+             variant,
+             ">(rstd::move(value)); }\n"_str);
+        constexpr ref<str> qualifiers[] = { "&"_str, "const&"_str, "&&"_str, "const&&"_str };
+        for (auto qualifier : qualifiers) {
+            emit(text,
+                 "        constexpr auto as_"_str,
+                 variant,
+                 "() "_str,
+                 qualifier,
+                 " noexcept -> "_str,
+                 type.as_str(),
+                 " "_str,
+                 qualifier,
+                 " { return "_str);
+            if (qualifier == "&&"_str)
+                text.push_str("rstd::move(storage_)"_str);
+            else if (qualifier == "const&&"_str)
+                text.push_str("static_cast<Storage const&&>(storage_)"_str);
+            else
+                text.push_str("storage_"_str);
+            emit(text, ".as<Tag::"_str, variant, ">(); }\n"_str);
+        }
+    }
+    constexpr ref<str> qualifiers[] = { "&"_str, "const&"_str, "&&"_str, "const&&"_str };
+    for (auto qualifier : qualifiers) {
+        emit(
+            text,
+            "        template<class Visitor>\n        constexpr decltype(auto) visit(Visitor&& visitor) "_str,
+            qualifier,
+            " { return "_str);
+        if (qualifier == "&&"_str)
+            text.push_str("rstd::move(storage_)"_str);
+        else if (qualifier == "const&&"_str)
+            text.push_str("static_cast<Storage const&&>(storage_)"_str);
+        else
+            text.push_str("storage_"_str);
+        text.push_str(".visit(rstd::forward<Visitor>(visitor)); }\n"_str);
+    }
+    emit(text,
+         "    };\n    Option<"_str,
+         name.as_str(),
+         "> "_str,
+         first.oneof.as_str(),
+         " {};\n"_str);
+}
 export auto generate(const Schema& schema) -> Vec<GeneratedFile> {
     Vec<GeneratedFile> files;
     for (auto& file : schema.files()) {
@@ -105,25 +214,7 @@ export auto generate(const Schema& schema) -> Vec<GeneratedFile> {
                 for (usize j {}; j < i; ++j)
                     if (message.fields[j].oneof == field.oneof) prior = true;
                 if (prior) continue;
-                text.push_str("    using C_"_str);
-                text.push_str(field.oneof.as_str());
-                text.push_str(" = rstd::Choice<"_str);
-                bool first = true;
-                for (auto& branch : message.fields) {
-                    if (branch.oneof != field.oneof) continue;
-                    if (! first) text.push_str(", "_str);
-                    first = false;
-                    text.push_str("rstd::choice_case<"_str);
-                    text.push_str(decimal(branch.number).as_str());
-                    text.push_str("u, "_str);
-                    text.push_str(field_type(branch).as_str());
-                    text.push_str(">"_str);
-                }
-                text.push_str(">;\n    Option<C_"_str);
-                text.push_str(field.oneof.as_str());
-                text.push_str("> "_str);
-                text.push_str(field.oneof.as_str());
-                text.push_str(" {};\n"_str);
+                emit_oneof(text, message, field);
             }
             for (auto& field : message.fields) {
                 if (! field.oneof.as_str().is_empty()) continue;
@@ -180,20 +271,19 @@ export auto generate(const Schema& schema) -> Vec<GeneratedFile> {
                     text.push_str(field.name.as_str());
                     text.push_str(", key, reader);\n"_str);
                 } else if (! field.oneof.as_str().is_empty()) {
-                    auto tag = decimal(field.number);
                     if (field.kind == 11) {
                         text.push_str(
                             "            if (key.wire != liproto::WireType::Bytes) return Err(reader.error(liproto::ErrorKind::WrongWire));\n            if (value."_str);
                         text.push_str(field.oneof.as_str());
                         text.push_str(".is_some() && value."_str);
                         text.push_str(field.oneof.as_str());
-                        text.push_str("->template is<"_str);
-                        text.push_str(tag.as_str());
-                        text.push_str("u>()) return liproto::merge_message(*value."_str);
+                        text.push_str("->is_"_str);
+                        text.push_str(field.variant.as_str());
+                        text.push_str("()) return liproto::merge_message(*value."_str);
                         text.push_str(field.oneof.as_str());
-                        text.push_str("->template as<"_str);
-                        text.push_str(tag.as_str());
-                        text.push_str("u>(), reader);\n            auto item = "_str);
+                        text.push_str("->as_"_str);
+                        text.push_str(field.variant.as_str());
+                        text.push_str("(), reader);\n            auto item = "_str);
                         text.push_str(field_type(field).as_str());
                         text.push_str(
                             "::make();\n            auto result = liproto::merge_message(*item, reader);\n            if (result.is_err()) return result;\n"_str);
@@ -207,9 +297,9 @@ export auto generate(const Schema& schema) -> Vec<GeneratedFile> {
                     text.push_str(field.oneof.as_str());
                     text.push_str(" = Some(T::C_"_str);
                     text.push_str(field.oneof.as_str());
-                    text.push_str("::with<"_str);
-                    text.push_str(tag.as_str());
-                    text.push_str("u>(rstd::move(item)));\n            return Ok(empty{});\n"_str);
+                    text.push_str("::make_"_str);
+                    text.push_str(field.variant.as_str());
+                    text.push_str("(rstd::move(item)));\n            return Ok(empty{});\n"_str);
                 } else if (field.kind == 11) {
                     text.push_str("            return liproto::read_message_field(value."_str);
                     text.push_str(field.name.as_str());
@@ -264,14 +354,14 @@ export auto generate(const Schema& schema) -> Vec<GeneratedFile> {
                     text.push_str(field.oneof.as_str());
                     text.push_str(".is_some() && value."_str);
                     text.push_str(field.oneof.as_str());
-                    text.push_str("->template is<"_str);
-                    text.push_str(decimal(field.number).as_str());
-                    text.push_str("u>()) {\n"_str);
+                    text.push_str("->is_"_str);
+                    text.push_str(field.variant.as_str());
+                    text.push_str("()) {\n"_str);
                     access = String::make("value."_str);
                     access.push_str(field.oneof.as_str());
-                    access.push_str("->template as<"_str);
-                    access.push_str(decimal(field.number).as_str());
-                    access.push_str("u>()"_str);
+                    access.push_str("->as_"_str);
+                    access.push_str(field.variant.as_str());
+                    access.push_str("()"_str);
                 } else if (field.repeated) {
                     text.push_str("        for (const auto& item : "_str);
                     text.push_str(access.as_str());
