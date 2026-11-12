@@ -85,11 +85,11 @@ export auto build_schema(const Request& request) -> Result<Schema, String> {
                 if (! identifier(item.name.as_str()))
                     return Err(String::make("invalid enum value"_str));
                 for (auto& prior : enumeration.values)
-                    if (prior.name == encoded_name(item.name.as_str()) ||
+                    if (prior.name == cpp_identifier(item.name.as_str()) ||
                         (! source.allow_alias && prior.number == item.number))
                         return Err(String::make("duplicate enum value"_str));
                 enumeration.values.push(
-                    EnumValue { encoded_name(item.name.as_str()), item.number });
+                    EnumValue { cpp_identifier(item.name.as_str()), item.number });
             }
             result.enums.push(rstd::move(enumeration));
         }
@@ -203,12 +203,12 @@ export auto build_schema(const Request& request) -> Result<Schema, String> {
                         field.optional     = ! field.repeated;
                     }
                 }
-                field.name.push_str(encoded_name(source_field.name.as_str()).as_str());
+                field.name.push_str(cpp_identifier(source_field.name.as_str()).as_str());
                 if (source_field.oneof.is_some() && ! source_field.optional) {
                     auto name = source.oneofs[usize(*source_field.oneof)].as_str();
                     if (! identifier(name)) return Err(String::make("invalid oneof name"_str));
                     field.oneof = String::make("o_"_str);
-                    field.oneof.push_str(encoded_name(name).as_str());
+                    field.oneof.push_str(cpp_identifier(name).as_str());
                 }
                 for (auto& existing : message.fields)
                     if (existing.name == field.name || existing.number == field.number)

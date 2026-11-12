@@ -18,21 +18,46 @@ auto identifier(ref<str> value) -> bool {
     return true;
 }
 
-// Escaping z makes the encoding injective; underscores remain structural
-// separators.
-auto encoded_name(ref<str> value, bool portable = false) -> String {
+void append_escape(String& output, unsigned char value) {
     constexpr char hex[] = "0123456789abcdef";
-    String         output;
+    output.push_ascii('z');
+    output.push_ascii(hex[value >> 4]);
+    output.push_ascii(hex[value & 15]);
+}
+auto cpp_identifier(ref<str> value) -> String {
+    auto   bytes = value.as_bytes();
+    String output;
+    for (usize index {}; index < bytes.len(); ++index) {
+        auto c      = bytes[index].to_primitive();
+        bool escape = false;
+        if (c == '_') {
+            // Keep components clear of reserved double underscores and the nested-type separator.
+            escape = index == usize() || index + usize(1) == bytes.len() ||
+                     bytes[index - usize(1)] == u8('_') || bytes[index + usize(1)] == u8('_') ||
+                     (index + usize(2) < bytes.len() && bytes[index + usize(1)] == u8('n') &&
+                      bytes[index + usize(2)] == u8('_'));
+        } else if (c == 'z') {
+            // Literal escape-looking text must remain distinct from an escaped byte.
+            escape = index + usize(2) < bytes.len() &&
+                     ((bytes[index + usize(1)] == u8('5') && bytes[index + usize(2)] == u8('f')) ||
+                      (bytes[index + usize(1)] == u8('7') && bytes[index + usize(2)] == u8('a')));
+        }
+        if (escape)
+            append_escape(output, c);
+        else
+            output.push_ascii(static_cast<char>(c));
+    }
+    return output;
+}
+
+auto portable_name(ref<str> value) -> String {
+    String output;
     for (auto byte : value.as_bytes()) {
         auto c = byte.to_primitive();
-        if ((c >= 'a' && c <= 'y') || (c >= '0' && c <= '9') ||
-            (! portable && c >= 'A' && c <= 'Z'))
+        if ((c >= 'a' && c <= 'y') || (c >= '0' && c <= '9'))
             output.push_ascii(static_cast<char>(c));
-        else {
-            output.push_ascii('z');
-            output.push_ascii(hex[c >> 4]);
-            output.push_ascii(hex[c & 15]);
-        }
+        else
+            append_escape(output, c);
     }
     return output;
 }
@@ -46,7 +71,7 @@ auto cpp_namespace(ref<str> package) -> Result<String, String> {
         if (! identifier(part)) return Err(String::make("invalid proto package"_str));
         if (start != usize()) result.push_str("::"_str);
         result.push_str("p_"_str);
-        result.push_str(encoded_name(part).as_str());
+        result.push_str(cpp_identifier(part).as_str());
         start = i + usize(1);
     }
     return Ok(rstd::move(result));
@@ -67,7 +92,7 @@ auto file_names(ref<str> path) -> Result<FileNames, String> {
         if (component.is_empty() || component == "."_str || component == ".."_str ||
             component.contains("\\"_str) || component.contains(":"_str))
             return Err(String::make("invalid proto path component"_str));
-        auto encoded = encoded_name(component, true);
+        auto encoded = portable_name(component);
         if (start != usize()) names.output.push_ascii('/');
         names.output.push_str(encoded.as_str());
         names.module.push_str(".p_"_str);

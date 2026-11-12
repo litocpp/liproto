@@ -57,7 +57,7 @@ class DescriptorGraph {
         symbol.proto_name.push_str(name);
         symbol.cpp_name = String::make(kind == SymbolKind::Message ? "M_"_str : "E_"_str);
         symbol.cpp_name.push_str(cpp_prefix);
-        symbol.cpp_name.push_str(encoded_name(name).as_str());
+        symbol.cpp_name.push_str(cpp_identifier(name).as_str());
         symbol.cpp_type = String::make("::"_str);
         symbol.cpp_type.push_str(files_[file].cpp_namespace.as_str());
         symbol.cpp_type.push_str("::"_str);
@@ -86,7 +86,7 @@ class DescriptorGraph {
         nested.push_str(message.name.as_str());
         nested.push_ascii('.');
         String cpp = String::make(cpp_prefix);
-        cpp.push_str(encoded_name(message.name.as_str()).as_str());
+        cpp.push_str(cpp_identifier(message.name.as_str()).as_str());
         cpp.push_str("_n_"_str);
         for (auto& enumeration : message.enums) {
             result = add_symbol(file,

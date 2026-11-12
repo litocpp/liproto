@@ -87,9 +87,9 @@ TEST(Codegen, PublicImportsAndUnifiedSymbols) {
 
 TEST(Codegen, NestedEnumsAliasesAndPortableNames) {
     Request request;
-    request.roots.push(String::make("dir/Case.proto"_str));
+    request.roots.push(String::make("dir/Case_z.proto"_str));
     FileDescriptor file;
-    file.name    = String::make("dir/Case.proto"_str);
+    file.name    = String::make("dir/Case_z.proto"_str);
     file.syntax  = String::make("proto3"_str);
     file.package = String::make("class._private"_str);
     MessageDescriptor message;
@@ -105,10 +105,205 @@ TEST(Codegen, NestedEnumsAliasesAndPortableNames) {
     request.files[usize()].messages[usize()].enums[usize()].allow_alias = true;
     auto schema                                                         = build_schema(request);
     ASSERT_TRUE(schema.is_ok());
-    EXPECT_EQ(schema->files()[usize()].path, "dir/z43ase.cppm"_str);
+    EXPECT_EQ(schema->files()[usize()].path, "dir/z43asez5fz7a.cppm"_str);
+    EXPECT_EQ(schema->files()[usize()].module, "proto.p_dir.p_z43asez5fz7a"_str);
     EXPECT_EQ(schema->files()[usize()].cpp_namespace, "p_class::p_z5fprivate"_str);
     EXPECT_EQ(schema->files()[usize()].enums[usize()].name, "E_z5fItem_n_Kind"_str);
     EXPECT_EQ(schema->files()[usize()].messages[usize()].name, "M_z5fItem"_str);
+    auto files = generate(*schema);
+    ASSERT_EQ(files.len(), usize(1));
+    EXPECT_EQ(files[usize()].path, "dir/z43asez5fz7a.cppm"_str);
+    auto content = files[usize()].content.as_str();
+    EXPECT_TRUE(content.contains("export module proto.p_dir.p_z43asez5fz7a;"_str));
+    EXPECT_TRUE(content.contains("v_ZERO = 0,"_str));
+    EXPECT_TRUE(content.contains("v_ALIAS = 0,"_str));
+}
+
+TEST(Codegen, ReadableNamesAndKeywordPrefixes) {
+    Request request;
+    request.roots.push(String::make("names.proto"_str));
+    FileDescriptor file;
+    file.name    = String::make("names.proto"_str);
+    file.syntax  = String::make("proto3"_str);
+    file.package = String::make("class.network_settings"_str);
+    EnumDescriptor enumeration;
+    enumeration.name = String::make("enum"_str);
+    enumeration.values.push(EnumValue { String::make("GET_NETWORK_SETTINGS_RSP"_str), i32(0) });
+    enumeration.values.push(EnumValue { String::make("default"_str), i32(1) });
+    file.enums.push(rstd::move(enumeration));
+    MessageDescriptor message;
+    message.name = String::make("class"_str);
+    message.oneofs.push(String::make("payload_data"_str));
+    message.oneofs.push(String::make("switch"_str));
+    ref<str> names[] = { "server_url"_str, "size"_str, "class"_str, "payload"_str, "return"_str };
+    for (auto name : names) {
+        Field field;
+        field.name   = String::make(name);
+        field.number = static_cast<unsigned>(message.fields.len().to_primitive()) + 1;
+        field.type   = 9;
+        field.label  = 1;
+        if (field.number >= 4) field.oneof = Some(field.number - 4);
+        message.fields.push(rstd::move(field));
+    }
+    file.messages.push(rstd::move(message));
+    request.files.push(rstd::move(file));
+    auto schema = build_schema(request);
+    ASSERT_TRUE(schema.is_ok());
+    ASSERT_EQ(schema->files().len(), usize(1));
+    const auto& resolved = schema->files()[usize()];
+    EXPECT_EQ(resolved.cpp_namespace, "p_class::p_network_settings"_str);
+    ASSERT_EQ(resolved.messages.len(), usize(1));
+    EXPECT_EQ(resolved.messages[usize()].name, "M_class"_str);
+    const auto& fields = resolved.messages[usize()].fields;
+    ASSERT_EQ(fields.len(), usize(5));
+    EXPECT_EQ(fields[usize()].name, "f_server_url"_str);
+    EXPECT_EQ(fields[usize(1)].name, "f_size"_str);
+    EXPECT_EQ(fields[usize(2)].name, "f_class"_str);
+    EXPECT_EQ(fields[usize(3)].oneof, "o_payload_data"_str);
+    EXPECT_EQ(fields[usize(4)].oneof, "o_switch"_str);
+    auto files = generate(*schema);
+    ASSERT_EQ(files.len(), usize(1));
+    auto content = files[usize()].content.as_str();
+    EXPECT_TRUE(content.contains("export namespace p_class::p_network_settings {"_str));
+    EXPECT_TRUE(content.contains("enum class E_enum : int {"_str));
+    EXPECT_TRUE(content.contains("v_GET_NETWORK_SETTINGS_RSP = 0,"_str));
+    EXPECT_TRUE(content.contains("v_default = 1,"_str));
+    EXPECT_TRUE(content.contains("struct M_class {"_str));
+    EXPECT_TRUE(content.contains("f_server_url {};"_str));
+    EXPECT_TRUE(content.contains("f_size {};"_str));
+    EXPECT_TRUE(content.contains("f_class {};"_str));
+    EXPECT_TRUE(content.contains("Option<C_o_payload_data> o_payload_data {};"_str));
+    EXPECT_TRUE(content.contains("Option<C_o_switch> o_switch {};"_str));
+}
+
+TEST(Codegen, LiteralZEscapesOnlyEscapeSequences) {
+    struct Name {
+        ref<str> proto;
+        ref<str> cpp;
+    };
+    const Name names[] = { { "z"_str, "f_z"_str },         { "z5"_str, "f_z5"_str },
+                           { "z5F"_str, "f_z5F"_str },     { "zebra"_str, "f_zebra"_str },
+                           { "sized"_str, "f_sized"_str }, { "zab"_str, "f_zab"_str },
+                           { "z5f"_str, "f_z7a5f"_str },   { "z7a"_str, "f_z7a7a"_str } };
+    Request    request;
+    request.roots.push(String::make("names.proto"_str));
+    FileDescriptor file;
+    file.name   = String::make("names.proto"_str);
+    file.syntax = String::make("proto3"_str);
+    MessageDescriptor message;
+    message.name = String::make("Names"_str);
+    for (const auto& name : names) {
+        Field field;
+        field.name   = String::make(name.proto);
+        field.number = static_cast<unsigned>(message.fields.len().to_primitive()) + 1;
+        field.type   = 13;
+        field.label  = 1;
+        message.fields.push(rstd::move(field));
+    }
+    file.messages.push(rstd::move(message));
+    request.files.push(rstd::move(file));
+    auto schema = build_schema(request);
+    ASSERT_TRUE(schema.is_ok());
+    const auto& fields = schema->files()[usize()].messages[usize()].fields;
+    ASSERT_EQ(fields.len(), usize(8));
+    auto files = generate(*schema);
+    ASSERT_EQ(files.len(), usize(1));
+    usize index {};
+    for (const auto& name : names) {
+        EXPECT_EQ(fields[index++].name, name.cpp);
+        auto declaration = String::make(name.cpp);
+        declaration.push_str(" {};"_str);
+        EXPECT_TRUE(files[usize()].content.as_str().contains(declaration.as_str()));
+    }
+}
+
+TEST(Codegen, ReservedUnderscoresRemainDistinctFromLiteralEscapes) {
+    struct Name {
+        ref<str> proto;
+        ref<str> cpp;
+    };
+    const Name names[] = { { "_value"_str, "f_z5fvalue"_str },
+                           { "value_"_str, "f_valuez5f"_str },
+                           { "value__part"_str, "f_valuez5fz5fpart"_str },
+                           { "z5fvalue"_str, "f_z7a5fvalue"_str },
+                           { "value_n_part"_str, "f_valuez5fn_part"_str },
+                           { "value_part"_str, "f_value_part"_str } };
+    Request    request;
+    request.roots.push(String::make("names.proto"_str));
+    FileDescriptor file;
+    file.name   = String::make("names.proto"_str);
+    file.syntax = String::make("proto3"_str);
+    MessageDescriptor message;
+    message.name = String::make("Names"_str);
+    for (const auto& name : names) {
+        Field field;
+        field.name   = String::make(name.proto);
+        field.number = static_cast<unsigned>(message.fields.len().to_primitive()) + 1;
+        field.type   = 13;
+        field.label  = 1;
+        message.fields.push(rstd::move(field));
+    }
+    file.messages.push(rstd::move(message));
+    request.files.push(rstd::move(file));
+    auto schema = build_schema(request);
+    ASSERT_TRUE(schema.is_ok());
+    const auto& fields = schema->files()[usize()].messages[usize()].fields;
+    ASSERT_EQ(fields.len(), usize(6));
+    auto files = generate(*schema);
+    ASSERT_EQ(files.len(), usize(1));
+    usize index {};
+    for (const auto& name : names) {
+        EXPECT_EQ(fields[index].name, name.cpp);
+        EXPECT_FALSE(fields[index++].name.as_str().contains("__"_str));
+        auto declaration = String::make(name.cpp);
+        declaration.push_str(" {};"_str);
+        EXPECT_TRUE(files[usize()].content.as_str().contains(declaration.as_str()));
+    }
+}
+
+TEST(Codegen, NestedAndLiteralTypeNamesDoNotCollide) {
+    Request request;
+    request.roots.push(String::make("names.proto"_str));
+    FileDescriptor file;
+    file.name    = String::make("names.proto"_str);
+    file.syntax  = String::make("proto3"_str);
+    file.package = String::make("demo"_str);
+    MessageDescriptor parent;
+    parent.name = String::make("A"_str);
+    MessageDescriptor child;
+    child.name = String::make("B"_str);
+    parent.nested.push(rstd::move(child));
+    ref<str> types[] = { ".demo.A.B"_str, ".demo.A_n_B"_str };
+    for (auto type : types) {
+        Field field;
+        field.number    = static_cast<unsigned>(parent.fields.len().to_primitive()) + 1;
+        field.name      = String::make(field.number == 1 ? "nested"_str : "literal"_str);
+        field.type      = 11;
+        field.label     = 1;
+        field.type_name = String::make(type);
+        parent.fields.push(rstd::move(field));
+    }
+    file.messages.push(rstd::move(parent));
+    MessageDescriptor literal;
+    literal.name = String::make("A_n_B"_str);
+    file.messages.push(rstd::move(literal));
+    request.files.push(rstd::move(file));
+    auto schema = build_schema(request);
+    ASSERT_TRUE(schema.is_ok());
+    const auto& messages = schema->files()[usize()].messages;
+    ASSERT_EQ(messages.len(), usize(3));
+    EXPECT_EQ(messages[usize(1)].name, "M_A_n_B"_str);
+    EXPECT_EQ(messages[usize(2)].name, "M_Az5fn_B"_str);
+    ASSERT_EQ(messages[usize()].fields.len(), usize(2));
+    EXPECT_EQ(messages[usize()].fields[usize()].message_type, "::p_demo::M_A_n_B"_str);
+    EXPECT_EQ(messages[usize()].fields[usize(1)].message_type, "::p_demo::M_Az5fn_B"_str);
+    auto files = generate(*schema);
+    ASSERT_EQ(files.len(), usize(1));
+    auto content = files[usize()].content.as_str();
+    EXPECT_TRUE(content.contains("struct M_A_n_B {"_str));
+    EXPECT_TRUE(content.contains("struct M_Az5fn_B {"_str));
+    EXPECT_TRUE(content.contains("::p_demo::M_A_n_B>"_str));
+    EXPECT_TRUE(content.contains("::p_demo::M_Az5fn_B>"_str));
 }
 
 TEST(Codegen, PublicDependencyWireForms) {
