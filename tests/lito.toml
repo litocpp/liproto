@@ -2,6 +2,7 @@
 name = "liproto-tests"
 version.workspace = true
 license.workspace = true
+authors.workspace = true
 
 [[test]]
 name = "liproto-tests"

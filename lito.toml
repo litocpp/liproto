@@ -1,22 +1,23 @@
 [workspace]
 name = "liproto"
-members = ["runtime", "codegen", "tests"]
+members = ["runtime", "codegen"]
 default-members = ["runtime", "codegen"]
 
 [workspace.package]
 version = "0.1.0"
 license = "MIT OR Apache-2.0"
+authors = ["hypengw <hypengwip@gmail.com>"]
 
 [workspace.dependencies]
-liproto = { path = "runtime" }
-liproto-codegen = { path = "codegen" }
-rstd-core = "0.1.2"
-rstd-alloc = "0.1.2"
-rstd-parse = "0.1.2"
-rstd-std = "0.1.2"
-rstd-nostd = "0.1.2"
-rstd-test = "0.1.2"
-rstd-argparse = "0.1.2"
+liproto = { path = "runtime", version = "0.1.0" }
+liproto-codegen = { path = "codegen", version = "0.1.0" }
+rstd-core = "0.1.13"
+rstd-alloc = "0.1.13"
+rstd-parse = "0.1.13"
+rstd-std = "0.1.13"
+rstd-nostd = "0.1.13"
+rstd-test = "0.1.13"
+rstd-argparse = "0.1.13"
 
 [profile]
 exceptions = false

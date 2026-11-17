@@ -2,6 +2,7 @@
 name = "liproto"
 version.workspace = true
 license.workspace = true
+authors.workspace = true
 
 [lib]
 name = "liproto"
