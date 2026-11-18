@@ -4,13 +4,13 @@ members = ["runtime", "codegen"]
 default-members = ["runtime", "codegen"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 license = "MIT OR Apache-2.0"
 authors = ["hypengw <hypengwip@gmail.com>"]
 
 [workspace.dependencies]
-liproto = { path = "runtime", version = "0.1.0" }
-liproto-codegen = { path = "codegen", version = "0.1.0" }
+liproto = { path = "runtime", version = "0.1.1" }
+liproto-codegen = { path = "codegen", version = "0.1.1" }
 rstd-core = "0.1.13"
 rstd-alloc = "0.1.13"
 rstd-parse = "0.1.13"
