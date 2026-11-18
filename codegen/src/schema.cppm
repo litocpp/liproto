@@ -41,20 +41,24 @@ export struct ResolvedFile {
 };
 export class Schema {
     Vec<ResolvedFile> files_;
-    Schema() = default;
+    bool              split_implementation_ = false;
+    Schema()                                = default;
     friend auto build_schema(const Request&) -> Result<Schema, String>;
 
 public:
     Schema(Schema&&)                    = default;
     auto operator=(Schema&&) -> Schema& = default;
     auto files() const -> slice<ResolvedFile> { return files_.as_slice(); }
+    auto split_implementation() const -> bool { return split_implementation_; }
 };
 export auto build_schema(const Request& request) -> Result<Schema, String> {
-    if (! request.parameter.as_str().is_empty())
-        return Err(String::make("generator parameters are not supported yet"_str));
+    auto parameter = request.parameter.as_str();
+    if (! parameter.is_empty() && parameter != "split"_str)
+        return Err(String::make("unsupported generator parameter: expected split"_str));
     auto graph = DescriptorGraph::build(request);
     if (graph.is_err()) return Err(rstd::move(graph.unwrap_err()));
     Schema schema;
+    schema.split_implementation_ = parameter == "split"_str;
     for (usize root_index {}; root_index < request.roots.len(); ++root_index) {
         auto& root = request.roots[root_index];
         for (usize previous {}; previous < root_index; ++previous)

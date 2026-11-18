@@ -29,7 +29,20 @@ TEST(Codegen, ValidatesSchemaBeforeEmission) {
     auto files = generate(*schema);
     ASSERT_EQ(files.len(), usize(1));
     EXPECT_EQ(files[usize()].path, "demo.cppm"_str);
+    EXPECT_TRUE(files[usize()].content.as_str().contains("switch (key.number.to_primitive())"_str));
     EXPECT_TRUE(encode_response(files.as_slice()).is_ok());
+    request.parameter = String::make("split"_str);
+    auto split        = build_schema(request);
+    ASSERT_TRUE(split.is_ok());
+    auto paired = generate(*split);
+    ASSERT_EQ(paired.len(), usize(2));
+    EXPECT_EQ(paired[usize(0)].path, "demo.cppm"_str);
+    EXPECT_EQ(paired[usize(1)].path, "demo.cpp"_str);
+    EXPECT_FALSE(
+        paired[usize(0)].content.as_str().contains("switch (key.number.to_primitive())"_str));
+    EXPECT_TRUE(paired[usize(1)].content.as_str().starts_with("module proto.p_demo;"_str));
+    EXPECT_TRUE(
+        paired[usize(1)].content.as_str().contains("switch (key.number.to_primitive())"_str));
     request.files[usize()].messages[usize()].fields[usize()].number = 19000;
     EXPECT_TRUE(build_schema(request).is_err());
 }

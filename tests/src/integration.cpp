@@ -6,7 +6,7 @@ using rstd::literals::operator""_str;
 using rstd::literals::operator""_bytes;
 using ::alloc::string::String;
 
-TEST(Integration, ProtocGeneratedModuleCompilesAndRuns) {
+TEST(Integration, ProtocSplitModuleCompilesAndRuns) {
     auto plugin      = rstd::env::var_os("LIPROTO_TEST_PLUGIN"_str);
     auto source      = rstd::env::var_os("LIPROTO_TEST_SOURCE"_str);
     auto rstd_source = rstd::env::var_os("LIPROTO_TEST_RSTD"_str);
@@ -78,7 +78,7 @@ message OneofNames {
                          .current_dir(root.as_path())
                          .arg("-I."_str)
                          .arg(plugin_argument.as_os_str())
-                         .arg("--liproto_out=."_str)
+                         .arg("--liproto_out=split:."_str)
                          .arg("demo.proto"_str)
                          .arg("other.proto"_str)
                          .output();
@@ -150,11 +150,12 @@ rtti = false
                       R"(local target = lito.target({kind = "lib", name = "generated-check"})
 local generated = lito.run({
   tool = lito.tool("protoc"), tools = {lito.tool("plugin")}, cwd = ".",
-  args = {"-I.", "--plugin=protoc-gen-liproto=@TOOL:1@", "--liproto_out=@OUTPUT_DIR@", "demo.proto", "other.proto"},
-  inputs = {"demo.proto", "other.proto"}, outputs = {"demo.cppm", "other.cppm"},
+  args = {"-I.", "--plugin=protoc-gen-liproto=@TOOL:1@", "--liproto_out=split:@OUTPUT_DIR@", "demo.proto", "other.proto"},
+  inputs = {"demo.proto", "other.proto"}, outputs = {"demo.cppm", "demo.cpp", "other.cppm", "other.cpp"},
 })
-lito.target_add_generated_source(target, generated.outputs[1])
-lito.target_add_generated_source(target, generated.outputs[2])
+for index = 1, 4 do
+  lito.target_add_generated_source(target, generated.outputs[index])
+end
 )"_str)
                     .is_ok());
     ASSERT_TRUE(write("main.cpp"_str, R"(#include "oracle.hpp"
@@ -227,6 +228,10 @@ int main() {
         else return false;
     });
     if (!visited) return 29;
+    auto destination = Selection::make_selected(Box<p_demo::M_Sample>::make());
+    destination = rstd::move(scalar);
+    auto moved_selection = rstd::move(destination);
+    if (!moved_selection.is_second() || moved_selection.as_second() != u32(8)) return 38;
     p_demo::M_Sample zero;
     zero.o_selection = Some(Selection::make_selected(Box<p_demo::M_Sample>::make()));
     if (liproto::merge(zero, "\x48\x00\xc0\x3e\x01"_bytes).is_err()) return 34;
