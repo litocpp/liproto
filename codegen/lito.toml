@@ -14,8 +14,6 @@ name = "protoc-gen-liproto"
 sources = ["src/main.cpp"]
 host-tool = true
 
-
 [dependencies]
 liproto = { workspace = true, pub = true }
-rstd-std = { workspace = true }
 rstd-nostd = { workspace = true }
