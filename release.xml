@@ -1,3 +1,10 @@
+<release version="0.1.2" date="2026-11-25">
+  <description>
+    <ul>
+      <li>Use C stdio in protoc-gen-liproto, with binary streams on Windows.</li>
+    </ul>
+  </description>
+</release>
 <release version="0.1.1" date="2026-11-18">
   <description>
     <ul>
